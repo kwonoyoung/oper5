@@ -5,6 +5,8 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/sync-source.yml'
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -14,8 +16,10 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
+      - name: Checkout main
         uses: actions/checkout@v4
+        with:
+          ref: main
 
       - name: Fetch source page
         run: |
@@ -33,22 +37,16 @@ jobs:
           p = Path('index.html')
           t = p.read_text(encoding='utf-8', errors='replace')
 
-          # Keep the cloned page on this GitHub Pages URL instead of routing
-          # initial navigation back to the source domain.
           t = t.replace('https://youre-next.app/ko/?lang=ko&amp;cc=KR#/', './?lang=ko&amp;cc=KR#/')
           t = t.replace('https://youre-next.app/ko/?lang=ko&cc=KR#/', './?lang=ko&cc=KR#/')
-
-          # Share/canonical metadata for this deployment.
           t = t.replace('<meta property="og:url" content="https://youre-next.app/ko/">',
                         '<meta property="og:url" content="https://kwonoyoung.github.io/oper5/">')
           t = t.replace('<link rel="canonical" href="https://youre-next.app/ko/">',
                         '<link rel="canonical" href="https://kwonoyoung.github.io/oper5/">')
-
-          # Root-relative assets/geo endpoints belong to the source service.
           t = t.replace('"/house/', '"https://youre-next.app/house/')
           t = t.replace("fetch('/loc/", "fetch('https://youre-next.app/loc/")
 
-          # Do not send clone traffic into the source site's Google Analytics property.
+          # Do not send clone traffic into the source site's Analytics property.
           t = re.sub(r'<script[^>]+googletagmanager\.com/gtag/js[^>]*></script>', '', t, flags=re.I)
           t = re.sub(r'<script>window\.dataLayer=window\.dataLayer\|\|\[\];function gtag\(\)\{dataLayer\.push\(arguments\);\}.*?</script>', '', t, count=1, flags=re.S)
 
@@ -64,5 +62,5 @@ jobs:
             echo 'No changes.'
           else
             git commit -m 'Deploy YOU’RE NEXT clone to oper5'
-            git push
+            git push origin HEAD:main
           fi
