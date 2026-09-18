@@ -46,6 +46,33 @@ jobs:
           t = re.sub(r'<script[^>]+googletagmanager\.com/gtag/js[^>]*></script>', '', t, flags=re.I)
           t = re.sub(r'<script>window\.dataLayer=window\.dataLayer\|\|\[\];function gtag\(\)\{dataLayer\.push\(arguments\);\}.*?</script>', '', t, count=1, flags=re.S)
 
+          # oper5 is ad-free on every SPA route. Disable the desktop ad rail so
+          # no empty 300px column remains after the ad itself is removed.
+          t = t.replace(
+              "const SIDE_ON = () => !!(window.matchMedia && window.matchMedia('(min-width:1280px)').matches);",
+              "const SIDE_ON = () => false;"
+          )
+
+          # Hide all source-site ad placements before first paint. This covers
+          # the landing banner, inline result/ranking ads, side ads and any
+          # future AdSense/house-ad variants that use the existing ad classes.
+          no_ads_css = '''<style id="oper5-no-ads">
+          .ad-slot,.ad-side,.ad-gate,.ad-house,.ad-rec[data-ad-rec],ins.adsbygoogle,[aria-label="광고"],[aria-label="広告"]{display:none!important}
+          </style>'''
+          t = t.replace('</head>', no_ads_css + '</head>', 1)
+
+          # Remove ad nodes from the DOM as well, including ads generated after
+          # hash-route navigation. CSS above prevents any visible flash.
+          no_ads_js = '''<script id="oper5-no-ads-runtime">
+          (()=>{
+            const sel='.ad-slot,.ad-side,.ad-gate,.ad-house,.ad-rec[data-ad-rec],ins.adsbygoogle,[aria-label="광고"],[aria-label="広告"]';
+            const clean=(root=document)=>{try{root.querySelectorAll(sel).forEach(el=>el.remove())}catch(e){}};
+            clean();
+            new MutationObserver(ms=>{for(const m of ms){for(const n of m.addedNodes){if(n&&n.nodeType===1){if(n.matches&&n.matches(sel))n.remove();else clean(n)}}}}).observe(document.documentElement,{childList:true,subtree:true});
+          })();
+          </script>'''
+          t = t.replace('</body>', no_ads_js + '</body>', 1)
+
           p.write_text(t, encoding='utf-8')
           PY
 
@@ -57,6 +84,6 @@ jobs:
           if git diff --cached --quiet; then
             echo 'No changes.'
           else
-            git commit -m 'Deploy YOU’RE NEXT clone to oper5'
+            git commit -m 'Deploy ad-free YOU’RE NEXT clone to oper5'
             git push
           fi
