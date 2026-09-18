@@ -42,6 +42,10 @@ jobs:
           t = t.replace('"/house/', '"https://youre-next.app/house/')
           t = t.replace("fetch('/loc/", "fetch('https://youre-next.app/loc/")
 
+          # Rename the visible site branding everywhere while leaving source URLs intact.
+          for old in ['YOU’RE NEXT', "YOU'RE NEXT", 'YOU&amp;#39;RE NEXT', 'YOU&#39;RE NEXT', 'YOU&APOS;RE NEXT']:
+              t = t.replace(old, '오춘기 권오영')
+
           # Do not send clone traffic into the source site's Analytics property.
           t = re.sub(r'<script[^>]+googletagmanager\.com/gtag/js[^>]*></script>', '', t, flags=re.I)
           t = re.sub(r'<script>window\.dataLayer=window\.dataLayer\|\|\[\];function gtag\(\)\{dataLayer\.push\(arguments\);\}.*?</script>', '', t, count=1, flags=re.S)
@@ -59,7 +63,8 @@ jobs:
           </style>'''
           t = t.replace('</head>', no_ads_css + '</head>', 1)
 
-          # Remove ad nodes plus the requested footer/language UI on every SPA route.
+          # Remove ad nodes plus the requested footer/language UI on every SPA route,
+          # and keep branding renamed even when route content is generated dynamically.
           cleanup_js = '''<script id="oper5-cleanup-runtime">
           (()=>{
             const adSel='.ad-slot,.ad-side,.ad-gate,.ad-house,.ad-rec[data-ad-rec],ins.adsbygoogle,[aria-label="광고"],[aria-label="広告"]';
@@ -68,7 +73,6 @@ jobs:
             const exactText = new Set(['개인정보처리방침','Instagram','한국어','KR KR','KR']);
             const removeRequested=(root=document)=>{
               try{
-                // Direct links/buttons/selects for privacy, Instagram and language/country controls.
                 root.querySelectorAll('a,button,select,[role="button"]').forEach(el=>{
                   const txt=(el.textContent||'').replace(/\s+/g,' ').trim();
                   const href=(el.getAttribute&&el.getAttribute('href')||'').toLowerCase();
@@ -82,8 +86,6 @@ jobs:
                     wrap.remove();
                   }
                 });
-
-                // Fallback for text-only wrappers used by the mobile/desktop footer.
                 root.querySelectorAll('span,div,p').forEach(el=>{
                   const txt=(el.textContent||'').replace(/\s+/g,' ').trim();
                   if(exactText.has(txt)){
@@ -94,7 +96,20 @@ jobs:
               }catch(e){}
             };
 
-            const clean=(root=document)=>{removeAds(root);removeRequested(root)};
+            const renameBrand=(root=document)=>{
+              try{
+                const walker=document.createTreeWalker(root,NodeFilter.SHOW_TEXT);
+                const nodes=[];
+                while(walker.nextNode()) nodes.push(walker.currentNode);
+                nodes.forEach(n=>{
+                  if(/YOU[’']RE\s+NEXT/i.test(n.nodeValue||''))
+                    n.nodeValue=(n.nodeValue||'').replace(/YOU[’']RE\s+NEXT/gi,'오춘기 권오영');
+                });
+                if(document.title) document.title=document.title.replace(/YOU[’']RE\s+NEXT/gi,'오춘기 권오영');
+              }catch(e){}
+            };
+
+            const clean=(root=document)=>{removeAds(root);removeRequested(root);renameBrand(root)};
             clean();
             new MutationObserver(ms=>{
               for(const m of ms){
@@ -102,11 +117,14 @@ jobs:
                   if(n&&n.nodeType===1){
                     if(n.matches&&n.matches(adSel)) n.remove();
                     else clean(n);
+                  } else if(n&&n.nodeType===3){
+                    if(/YOU[’']RE\s+NEXT/i.test(n.nodeValue||'')) n.nodeValue=(n.nodeValue||'').replace(/YOU[’']RE\s+NEXT/gi,'오춘기 권오영');
                   }
                 }
               }
               removeRequested(document);
-            }).observe(document.documentElement,{childList:true,subtree:true});
+              renameBrand(document);
+            }).observe(document.documentElement,{childList:true,subtree:true,characterData:true});
 
             window.addEventListener('hashchange',()=>setTimeout(()=>clean(document),0));
           })();
@@ -124,6 +142,6 @@ jobs:
           if git diff --cached --quiet; then
             echo 'No changes.'
           else
-            git commit -m 'Deploy cleaned oper5 UI'
+            git commit -m 'Deploy renamed oper5 branding'
             git push
           fi
