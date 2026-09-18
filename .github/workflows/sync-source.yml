@@ -1,10 +1,11 @@
-name: Build oper5 from source page
+name: Build oper5 local-only
 
 on:
   push:
     branches: [main]
     paths:
       - '.github/workflows/sync-source.yml'
+      - 'scripts/localize_oper5.py'
   workflow_dispatch:
 
 permissions:
@@ -17,142 +18,40 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Fetch source page
-        run: |
-          curl -L --fail --retry 3 \
-            -A 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/152 Safari/537.36' \
-            'https://youre-next.app/ko/?lang=ko&cc=KR' \
-            -o index.html
+      - name: Convert current page to local-only mode
+        run: python scripts/localize_oper5.py
 
-      - name: Adapt for GitHub Pages
+      - name: Validate JavaScript syntax
         run: |
           python - <<'PY'
           from pathlib import Path
           import re
+          h=Path('index.html').read_text(encoding='utf-8', errors='replace')
+          scripts='\n'.join(re.findall(r'<script(?:[^>]*)>(.*?)</script>', h, re.S|re.I))
+          Path('/tmp/oper5-all.js').write_text(scripts, encoding='utf-8')
+          PY
+          node --check /tmp/oper5-all.js
 
-          p = Path('index.html')
-          t = p.read_text(encoding='utf-8', errors='replace')
-
-          t = t.replace('https://youre-next.app/ko/?lang=ko&amp;cc=KR#/', './?lang=ko&amp;cc=KR#/')
-          t = t.replace('https://youre-next.app/ko/?lang=ko&cc=KR#/', './?lang=ko&cc=KR#/')
-          t = t.replace('<meta property="og:url" content="https://youre-next.app/ko/">',
-                        '<meta property="og:url" content="https://kwonoyoung.github.io/oper5/">')
-          t = t.replace('<link rel="canonical" href="https://youre-next.app/ko/">',
-                        '<link rel="canonical" href="https://kwonoyoung.github.io/oper5/">')
-          t = t.replace('"/house/', '"https://youre-next.app/house/')
-          t = t.replace("fetch('/loc/", "fetch('https://youre-next.app/loc/")
-
-          # Rename the visible site branding everywhere while leaving source URLs intact.
-          for old in ['YOU’RE NEXT', "YOU'RE NEXT", 'YOU&amp;#39;RE NEXT', 'YOU&#39;RE NEXT', 'YOU&APOS;RE NEXT']:
-              t = t.replace(old, '오춘기 권오영')
-
-          # Do not send clone traffic into the source site's Analytics property.
-          t = re.sub(r'<script[^>]+googletagmanager\.com/gtag/js[^>]*></script>', '', t, flags=re.I)
-          t = re.sub(r'<script>window\.dataLayer=window\.dataLayer\|\|\[\];function gtag\(\)\{dataLayer\.push\(arguments\);\}.*?</script>', '', t, count=1, flags=re.S)
-
-          # oper5 is ad-free on every SPA route. Disable the desktop ad rail so
-          # no empty 300px column remains after the ad itself is removed.
-          t = t.replace(
-              "const SIDE_ON = () => !!(window.matchMedia && window.matchMedia('(min-width:1280px)').matches);",
-              "const SIDE_ON = () => false;"
-          )
-
-          # Hide all source-site ad placements before first paint.
-          no_ads_css = '''<style id="oper5-no-ads">
-          .ad-slot,.ad-side,.ad-gate,.ad-house,.ad-rec[data-ad-rec],ins.adsbygoogle,[aria-label="광고"],[aria-label="広告"]{display:none!important}
-          </style>'''
-          t = t.replace('</head>', no_ads_css + '</head>', 1)
-
-          # Remove ad nodes plus the requested footer/language UI on every SPA route,
-          # and keep branding renamed when new route content is inserted.
-          cleanup_js = '''<script id="oper5-cleanup-runtime">
-          (()=>{
-            const adSel='.ad-slot,.ad-side,.ad-gate,.ad-house,.ad-rec[data-ad-rec],ins.adsbygoogle,[aria-label="광고"],[aria-label="広告"]';
-            const brandRe=/YOU[’']RE\s+NEXT/gi;
-            const exactText=new Set(['개인정보처리방침','Instagram','한국어','KR KR','KR']);
-
-            const removeAds=(root=document)=>{
-              try{
-                if(root.nodeType===1 && root.matches && root.matches(adSel)){root.remove();return;}
-                if(root.querySelectorAll) root.querySelectorAll(adSel).forEach(el=>el.remove());
-              }catch(e){}
-            };
-
-            const removeRequested=(root=document)=>{
-              try{
-                if(!root.querySelectorAll) return;
-                root.querySelectorAll('a,button,select,[role="button"]').forEach(el=>{
-                  const txt=(el.textContent||'').replace(/\s+/g,' ').trim();
-                  const href=(el.getAttribute&&el.getAttribute('href')||'').toLowerCase();
-                  const aria=(el.getAttribute&&el.getAttribute('aria-label')||'').toLowerCase();
-                  const title=(el.getAttribute&&el.getAttribute('title')||'').toLowerCase();
-                  const isPrivacy=txt==='개인정보처리방침'||/privacy/.test(href+aria+title);
-                  const isInstagram=txt==='Instagram'||/instagram\.com/.test(href);
-                  const isLanguage=exactText.has(txt)||/language|locale|country/.test(aria+' '+title);
-                  if(isPrivacy||isInstagram||isLanguage){
-                    const wrap=el.closest('li,nav,.lang,.language,.locale,.country,.dropdown,.select-wrap')||el;
-                    wrap.remove();
-                  }
-                });
-                root.querySelectorAll('span,div,p').forEach(el=>{
-                  const txt=(el.textContent||'').replace(/\s+/g,' ').trim();
-                  if(exactText.has(txt)){
-                    const interactive=el.closest('a,button,[role="button"]');
-                    (interactive||el).remove();
-                  }
-                });
-              }catch(e){}
-            };
-
-            const renameTextNode=(n)=>{
-              try{
-                const v=n&&n.nodeValue||'';
-                if(/YOU[’']RE\s+NEXT/i.test(v)) n.nodeValue=v.replace(brandRe,'오춘기 권오영');
-              }catch(e){}
-            };
-
-            const renameBrand=(root=document)=>{
-              try{
-                if(root.nodeType===3){renameTextNode(root);return;}
-                const walker=document.createTreeWalker(root,NodeFilter.SHOW_TEXT);
-                while(walker.nextNode()) renameTextNode(walker.currentNode);
-                if(document.title && /YOU[’']RE\s+NEXT/i.test(document.title))
-                  document.title=document.title.replace(brandRe,'오춘기 권오영');
-              }catch(e){}
-            };
-
-            const clean=(root=document)=>{removeAds(root);removeRequested(root);renameBrand(root)};
-            clean(document);
-
-            new MutationObserver(ms=>{
-              for(const m of ms){
-                if(m.type==='characterData'){
-                  renameTextNode(m.target);
-                  continue;
-                }
-                for(const n of m.addedNodes){
-                  if(n&&n.nodeType===1) clean(n);
-                  else if(n&&n.nodeType===3) renameTextNode(n);
-                }
-              }
-            }).observe(document.documentElement,{childList:true,subtree:true,characterData:true});
-
-            window.addEventListener('hashchange',()=>setTimeout(()=>clean(document),0));
-          })();
-          </script>'''
-          t = t.replace('</body>', cleanup_js + '</body>', 1)
-
-          p.write_text(t, encoding='utf-8')
+      - name: Check local-only dependencies
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          t=Path('index.html').read_text(encoding='utf-8', errors='replace')
+          blocked=['firestore.googleapis.com','identitytoolkit.googleapis.com','securetoken.googleapis.com','fonts.googleapis.com']
+          found=[x for x in blocked if x in t]
+          if found:
+            raise SystemExit('External runtime dependency remains: '+', '.join(found))
+          print('Local-only dependency check passed.')
           PY
 
-      - name: Commit generated index.html
+      - name: Commit local-only site
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add index.html
+          git add index.html geo.json
           if git diff --cached --quiet; then
-            echo 'No changes.'
+            echo 'No generated changes.'
           else
-            git commit -m 'Deploy optimized oper5 runtime'
+            git commit -m 'Deploy oper5 local-only version'
             git push
           fi
