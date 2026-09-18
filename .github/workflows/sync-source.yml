@@ -46,6 +46,11 @@ jobs:
           ins.adsbygoogle,[aria-label="광고"],[aria-label="広告"],[aria-label="Advertisement"] {
             display:none!important;
           }
+          a[href="/privacy/"],a[href="/privacy"],
+          a[href="https://kwonoyoung.github.io/privacy/"],
+          a[href*="instagram.com/yourenext2026"] {
+            display:none!important;
+          }
           </style>'''
 
           ad_js='''<script id="oper5-ad-free-runtime">
@@ -55,6 +60,10 @@ jobs:
               try{
                 if(root && root.nodeType===1 && root.matches && root.matches(sel)){root.remove();return;}
                 if(root && root.querySelectorAll) root.querySelectorAll(sel).forEach(el=>el.remove());
+                if(root && root.querySelectorAll) root.querySelectorAll('a').forEach(el=>{
+                  const href=(el.getAttribute('href')||'').trim().toLowerCase();
+                  if(href==='/privacy/' || href==='/privacy' || href==='https://kwonoyoung.github.io/privacy/' || href.includes('instagram.com/yourenext2026')) el.remove();
+                });
               }catch(e){}
             };
             clean(document);
@@ -87,6 +96,10 @@ jobs:
               t=t.replace("'/house/", "'https://youre-next.app/house/")
               t=t.replace("fetch('/loc/", "fetch('https://youre-next.app/loc/")
 
+              # Remove Privacy Policy and Instagram links from the static markup in every language.
+              t=re.sub(r'<a\b[^>]*href=["\'](?:https://kwonoyoung\.github\.io)?/privacy/?["\'][^>]*>.*?</a>', '', t, flags=re.I|re.S)
+              t=re.sub(r'<a\b[^>]*href=["\'][^"\']*instagram\.com/yourenext2026/?[^"\']*["\'][^>]*>.*?</a>', '', t, flags=re.I|re.S)
+
               # Deployment metadata for each language page.
               t=re.sub(r'<meta property="og:url" content="[^"]*">',
                        f'<meta property="og:url" content="{canonical}">',t,count=1)
@@ -114,7 +127,7 @@ jobs:
                   "const SIDE_ON = () => false;"
               )
 
-              # Dynamically-created SPA ads are removed too; all other UI stays intact.
+              # Dynamically-created SPA ads/links are removed too; all other UI stays intact.
               t=t.replace('</body>',ad_js+'</body>',1)
               path.write_text(t,encoding='utf-8')
 
@@ -147,6 +160,6 @@ jobs:
           if git diff --cached --quiet; then
             echo 'No generated changes.'
           else
-            git commit -m 'Deploy multilingual YOU’RE NEXT clone without ads'
+            git commit -m 'Deploy multilingual clone without ads privacy Instagram'
             git push
           fi
