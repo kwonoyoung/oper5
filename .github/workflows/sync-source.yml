@@ -51,11 +51,36 @@ jobs:
           a[href*="instagram.com/yourenext2026"] {
             display:none!important;
           }
+          .oper5-owner-label{
+            display:inline-flex;
+            align-items:center;
+            margin-left:10px;
+            font-size:14px;
+            font-weight:700;
+            line-height:1;
+            white-space:nowrap;
+            vertical-align:middle;
+          }
+          @media (max-width:640px){
+            .oper5-owner-label{margin-left:7px;font-size:12px;}
+          }
           </style>'''
 
           ad_js='''<script id="oper5-ad-free-runtime">
           (()=>{
             const sel='.ad-slot,.ad-side,.ad-gate,.ad-house,.ad-rec[data-ad-rec],ins.adsbygoogle,[aria-label="광고"],[aria-label="広告"],[aria-label="Advertisement"]';
+            const addOwnerLabel=()=>{
+              try{
+                if(document.querySelector('.oper5-owner-label')) return;
+                const nodes=[...document.querySelectorAll('a,div,span,h1,h2,strong,b')];
+                const brand=nodes.find(el=>/^\\s*YOU[’']RE\\s+NEXT\\s*$/.test((el.textContent||'').trim()));
+                if(!brand) return;
+                const label=document.createElement('span');
+                label.className='oper5-owner-label';
+                label.textContent='오춘기 권오영';
+                brand.insertAdjacentElement('afterend',label);
+              }catch(e){}
+            };
             const clean=root=>{
               try{
                 if(root && root.nodeType===1 && root.matches && root.matches(sel)){root.remove();return;}
@@ -64,11 +89,13 @@ jobs:
                   const href=(el.getAttribute('href')||'').trim().toLowerCase();
                   if(href==='/privacy/' || href==='/privacy' || href==='https://kwonoyoung.github.io/privacy/' || href.includes('instagram.com/yourenext2026')) el.remove();
                 });
+                addOwnerLabel();
               }catch(e){}
             };
             clean(document);
             new MutationObserver(ms=>{
               for(const m of ms) for(const n of m.addedNodes) if(n && n.nodeType===1) clean(n);
+              addOwnerLabel();
             }).observe(document.documentElement,{childList:true,subtree:true});
           })();
           </script>'''
@@ -76,7 +103,6 @@ jobs:
           def adapt(path, lang, cc, canonical):
               t=path.read_text(encoding='utf-8',errors='replace')
 
-              # Keep language/country switching inside the oper5 GitHub Pages site.
               replacements={
                   'https://youre-next.app/ko/': SITE,
                   'https://youre-next.app/en/': SITE+'en/',
@@ -86,27 +112,21 @@ jobs:
               for old,new in replacements.items():
                   t=t.replace(old,new)
 
-              # Some source routing code creates root paths such as /en/ and /ja/.
-              # Prefix those routes with /oper5/ so switches do not leave this project site.
               t=t.replace("return '/' + (c.pack === 'KR' ? '' : c.pack.toLowerCase() + '/') + lang + '/' + (KIND_PATH[kind] || '');",
                           "return '/oper5/' + (c.pack === 'KR' ? '' : c.pack.toLowerCase() + '/') + lang + '/' + (KIND_PATH[kind] || '');")
 
-              # Root-relative source assets/data must resolve on the source host, not github.io.
               t=t.replace('"/house/', '"https://youre-next.app/house/')
               t=t.replace("'/house/", "'https://youre-next.app/house/")
               t=t.replace("fetch('/loc/", "fetch('https://youre-next.app/loc/")
 
-              # Remove Privacy Policy and Instagram links from the static markup in every language.
               t=re.sub(r'<a\b[^>]*href=["\'](?:https://kwonoyoung\.github\.io)?/privacy/?["\'][^>]*>.*?</a>', '', t, flags=re.I|re.S)
               t=re.sub(r'<a\b[^>]*href=["\'][^"\']*instagram\.com/yourenext2026/?[^"\']*["\'][^>]*>.*?</a>', '', t, flags=re.I|re.S)
 
-              # Deployment metadata for each language page.
               t=re.sub(r'<meta property="og:url" content="[^"]*">',
                        f'<meta property="og:url" content="{canonical}">',t,count=1)
               t=re.sub(r'<link rel="canonical" href="[^"]*">',
                        f'<link rel="canonical" href="{canonical}">',t,count=1)
 
-              # Correct hreflang targets for this GitHub Pages deployment.
               t=re.sub(r'<link rel="alternate"[^>]+>', '', t)
               hreflangs=(
                   f'<link rel="alternate" hreflang="ko" href="{SITE}">'
@@ -117,17 +137,14 @@ jobs:
               )
               t=t.replace('</head>',hreflangs+ad_css+'</head>',1)
 
-              # Do not send oper5 traffic to the source Analytics property.
               t=re.sub(r'<script[^>]+googletagmanager\.com/gtag/js[^>]*></script>','',t,flags=re.I)
               t=re.sub(r'<script>window\.dataLayer=window\.dataLayer\|\|\[\];function gtag\(\)\{dataLayer\.push\(arguments\);\}.*?</script>','',t,count=1,flags=re.S)
 
-              # Disable the desktop side-ad rail so no blank column remains.
               t=t.replace(
                   "const SIDE_ON = () => !!(window.matchMedia && window.matchMedia('(min-width:1280px)').matches);",
                   "const SIDE_ON = () => false;"
               )
 
-              # Dynamically-created SPA ads/links are removed too; all other UI stays intact.
               t=t.replace('</body>',ad_js+'</body>',1)
               path.write_text(t,encoding='utf-8')
 
@@ -160,6 +177,6 @@ jobs:
           if git diff --cached --quiet; then
             echo 'No generated changes.'
           else
-            git commit -m 'Deploy multilingual clone without ads privacy Instagram'
+            git commit -m 'Add owner label next to YOU’RE NEXT branding'
             git push
           fi
