@@ -64,25 +64,33 @@ jobs:
           t = t.replace('</head>', no_ads_css + '</head>', 1)
 
           # Remove ad nodes plus the requested footer/language UI on every SPA route,
-          # and keep branding renamed even when route content is generated dynamically.
+          # and keep branding renamed when new route content is inserted.
           cleanup_js = '''<script id="oper5-cleanup-runtime">
           (()=>{
             const adSel='.ad-slot,.ad-side,.ad-gate,.ad-house,.ad-rec[data-ad-rec],ins.adsbygoogle,[aria-label="광고"],[aria-label="広告"]';
-            const removeAds=(root=document)=>{try{root.querySelectorAll(adSel).forEach(el=>el.remove())}catch(e){}};
+            const brandRe=/YOU[’']RE\s+NEXT/gi;
+            const exactText=new Set(['개인정보처리방침','Instagram','한국어','KR KR','KR']);
 
-            const exactText = new Set(['개인정보처리방침','Instagram','한국어','KR KR','KR']);
+            const removeAds=(root=document)=>{
+              try{
+                if(root.nodeType===1 && root.matches && root.matches(adSel)){root.remove();return;}
+                if(root.querySelectorAll) root.querySelectorAll(adSel).forEach(el=>el.remove());
+              }catch(e){}
+            };
+
             const removeRequested=(root=document)=>{
               try{
+                if(!root.querySelectorAll) return;
                 root.querySelectorAll('a,button,select,[role="button"]').forEach(el=>{
                   const txt=(el.textContent||'').replace(/\s+/g,' ').trim();
                   const href=(el.getAttribute&&el.getAttribute('href')||'').toLowerCase();
                   const aria=(el.getAttribute&&el.getAttribute('aria-label')||'').toLowerCase();
                   const title=(el.getAttribute&&el.getAttribute('title')||'').toLowerCase();
-                  const isPrivacy = txt==='개인정보처리방침' || /privacy/.test(href+aria+title);
-                  const isInstagram = txt==='Instagram' || /instagram\.com/.test(href);
-                  const isLanguage = exactText.has(txt) || /language|locale|country/.test(aria+' '+title);
-                  if(isPrivacy || isInstagram || isLanguage){
-                    const wrap=el.closest('li,nav,.lang,.language,.locale,.country,.dropdown,.select-wrap') || el;
+                  const isPrivacy=txt==='개인정보처리방침'||/privacy/.test(href+aria+title);
+                  const isInstagram=txt==='Instagram'||/instagram\.com/.test(href);
+                  const isLanguage=exactText.has(txt)||/language|locale|country/.test(aria+' '+title);
+                  if(isPrivacy||isInstagram||isLanguage){
+                    const wrap=el.closest('li,nav,.lang,.language,.locale,.country,.dropdown,.select-wrap')||el;
                     wrap.remove();
                   }
                 });
@@ -96,34 +104,37 @@ jobs:
               }catch(e){}
             };
 
+            const renameTextNode=(n)=>{
+              try{
+                const v=n&&n.nodeValue||'';
+                if(/YOU[’']RE\s+NEXT/i.test(v)) n.nodeValue=v.replace(brandRe,'오춘기 권오영');
+              }catch(e){}
+            };
+
             const renameBrand=(root=document)=>{
               try{
+                if(root.nodeType===3){renameTextNode(root);return;}
                 const walker=document.createTreeWalker(root,NodeFilter.SHOW_TEXT);
-                const nodes=[];
-                while(walker.nextNode()) nodes.push(walker.currentNode);
-                nodes.forEach(n=>{
-                  if(/YOU[’']RE\s+NEXT/i.test(n.nodeValue||''))
-                    n.nodeValue=(n.nodeValue||'').replace(/YOU[’']RE\s+NEXT/gi,'오춘기 권오영');
-                });
-                if(document.title) document.title=document.title.replace(/YOU[’']RE\s+NEXT/gi,'오춘기 권오영');
+                while(walker.nextNode()) renameTextNode(walker.currentNode);
+                if(document.title && /YOU[’']RE\s+NEXT/i.test(document.title))
+                  document.title=document.title.replace(brandRe,'오춘기 권오영');
               }catch(e){}
             };
 
             const clean=(root=document)=>{removeAds(root);removeRequested(root);renameBrand(root)};
-            clean();
+            clean(document);
+
             new MutationObserver(ms=>{
               for(const m of ms){
+                if(m.type==='characterData'){
+                  renameTextNode(m.target);
+                  continue;
+                }
                 for(const n of m.addedNodes){
-                  if(n&&n.nodeType===1){
-                    if(n.matches&&n.matches(adSel)) n.remove();
-                    else clean(n);
-                  } else if(n&&n.nodeType===3){
-                    if(/YOU[’']RE\s+NEXT/i.test(n.nodeValue||'')) n.nodeValue=(n.nodeValue||'').replace(/YOU[’']RE\s+NEXT/gi,'오춘기 권오영');
-                  }
+                  if(n&&n.nodeType===1) clean(n);
+                  else if(n&&n.nodeType===3) renameTextNode(n);
                 }
               }
-              removeRequested(document);
-              renameBrand(document);
             }).observe(document.documentElement,{childList:true,subtree:true,characterData:true});
 
             window.addEventListener('hashchange',()=>setTimeout(()=>clean(document),0));
@@ -142,6 +153,6 @@ jobs:
           if git diff --cached --quiet; then
             echo 'No changes.'
           else
-            git commit -m 'Deploy renamed oper5 branding'
+            git commit -m 'Deploy optimized oper5 runtime'
             git push
           fi
