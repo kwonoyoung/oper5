@@ -1,11 +1,10 @@
-name: Build oper5 local-only
+name: Rebuild oper5 from YOU’RE NEXT
 
 on:
   push:
     branches: [main]
     paths:
       - '.github/workflows/sync-source.yml'
-      - 'scripts/localize_oper5.py'
   workflow_dispatch:
 
 permissions:
@@ -18,8 +17,78 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Convert current page to local-only mode
-        run: python scripts/localize_oper5.py
+      - name: Fetch current Korean source page
+        run: |
+          curl -L --fail --retry 3 \
+            -A 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/152 Safari/537.36' \
+            'https://youre-next.app/ko/?lang=ko&cc=KR' \
+            -o index.html
+
+      - name: Adapt for oper5 and remove ads only
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+
+          p = Path('index.html')
+          t = p.read_text(encoding='utf-8', errors='replace')
+
+          # Keep the source site's visible UI and features, but make clone navigation
+          # stay on oper5 where the source has a direct Korean home link.
+          t = t.replace('https://youre-next.app/ko/?lang=ko&amp;cc=KR#/', './?lang=ko&amp;cc=KR#/')
+          t = t.replace('https://youre-next.app/ko/?lang=ko&cc=KR#/', './?lang=ko&cc=KR#/')
+
+          # Point metadata at this deployment.
+          t = re.sub(r'<meta property="og:url" content="[^"]*">',
+                     '<meta property="og:url" content="https://kwonoyoung.github.io/oper5/">', t, count=1)
+          t = re.sub(r'<link rel="canonical" href="[^"]*">',
+                     '<link rel="canonical" href="https://kwonoyoung.github.io/oper5/">', t, count=1)
+
+          # Source assets/data that use root-relative paths must still resolve correctly
+          # when the page is hosted under /oper5/ on GitHub Pages.
+          t = t.replace('"/house/', '"https://youre-next.app/house/')
+          t = t.replace("'/house/", "'https://youre-next.app/house/")
+          t = t.replace("fetch('/loc/", "fetch('https://youre-next.app/loc/")
+
+          # Do not send oper5 traffic into the source site's analytics property.
+          t = re.sub(r'<script[^>]+googletagmanager\.com/gtag/js[^>]*></script>', '', t, flags=re.I)
+          t = re.sub(r'<script>window\.dataLayer=window\.dataLayer\|\|\[\];function gtag\(\)\{dataLayer\.push\(arguments\);\}.*?</script>', '', t, count=1, flags=re.S)
+
+          # Removing the desktop side-ad rail also removes the blank 300px column.
+          t = t.replace(
+              "const SIDE_ON = () => !!(window.matchMedia && window.matchMedia('(min-width:1280px)').matches);",
+              "const SIDE_ON = () => false;"
+          )
+
+          # Hide every source ad placement before first paint. No other UI is hidden.
+          ad_css = '''<style id="oper5-ad-free">
+          .ad-slot,.ad-side,.ad-gate,.ad-house,.ad-rec[data-ad-rec],
+          ins.adsbygoogle,[aria-label="광고"],[aria-label="広告"] {
+            display:none!important;
+          }
+          </style>'''
+          t = t.replace('</head>', ad_css + '</head>', 1)
+
+          # SPA routes can create ad nodes after initial load; remove only those nodes.
+          ad_js = '''<script id="oper5-ad-free-runtime">
+          (()=>{
+            const sel='.ad-slot,.ad-side,.ad-gate,.ad-house,.ad-rec[data-ad-rec],ins.adsbygoogle,[aria-label="광고"],[aria-label="広告"]';
+            const clean=root=>{
+              try{
+                if(root && root.nodeType===1 && root.matches && root.matches(sel)){root.remove();return;}
+                if(root && root.querySelectorAll) root.querySelectorAll(sel).forEach(el=>el.remove());
+              }catch(e){}
+            };
+            clean(document);
+            new MutationObserver(ms=>{
+              for(const m of ms) for(const n of m.addedNodes) if(n && n.nodeType===1) clean(n);
+            }).observe(document.documentElement,{childList:true,subtree:true});
+          })();
+          </script>'''
+          t = t.replace('</body>', ad_js + '</body>', 1)
+
+          p.write_text(t, encoding='utf-8')
+          PY
 
       - name: Validate JavaScript syntax
         run: |
@@ -32,26 +101,14 @@ jobs:
           PY
           node --check /tmp/oper5-all.js
 
-      - name: Check local-only dependencies
-        run: |
-          python - <<'PY'
-          from pathlib import Path
-          t=Path('index.html').read_text(encoding='utf-8', errors='replace')
-          blocked=['firestore.googleapis.com','identitytoolkit.googleapis.com','securetoken.googleapis.com','fonts.googleapis.com']
-          found=[x for x in blocked if x in t]
-          if found:
-            raise SystemExit('External runtime dependency remains: '+', '.join(found))
-          print('Local-only dependency check passed.')
-          PY
-
-      - name: Commit local-only site
+      - name: Commit rebuilt site
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add index.html geo.json
+          git add index.html
           if git diff --cached --quiet; then
             echo 'No generated changes.'
           else
-            git commit -m 'Deploy oper5 local-only version'
+            git commit -m 'Deploy YOU’RE NEXT clone without ads'
             git push
           fi
