@@ -27,7 +27,7 @@ jobs:
           curl -L --fail --retry 3 -A "$UA" 'https://youre-next.app/ja/?lang=ja&cc=JP' -o ja/index.html
           curl -L --fail --retry 3 -A "$UA" 'https://youre-next.app/us/es/?lang=es&cc=US' -o us/es/index.html
 
-      - name: Adapt all languages for oper5 and remove ads only
+      - name: Adapt all languages for oper5 and add world language support
         run: |
           python - <<'PY'
           from pathlib import Path
@@ -41,115 +41,69 @@ jobs:
               (Path('us/es/index.html'),'es','US',SITE+'us/es/'),
           ]
 
-          ad_css='''<style id="oper5-ad-free">
+          css='''<style id="oper5-ad-free">
           .ad-slot,.ad-side,.ad-gate,.ad-house,.ad-rec[data-ad-rec],
-          ins.adsbygoogle,[aria-label="광고"],[aria-label="広告"],[aria-label="Advertisement"] {
-            display:none!important;
-          }
-          a[href="/privacy/"],a[href="/privacy"],
-          a[href="https://kwonoyoung.github.io/privacy/"],
-          a[href*="instagram.com/yourenext2026"] {
-            display:none!important;
-          }
-          .oper5-owner-label{
-            display:inline-flex;
-            align-items:center;
-            margin-left:10px;
-            font-size:14px;
-            font-weight:700;
-            line-height:1;
-            white-space:nowrap;
-            vertical-align:middle;
-          }
-          @media (max-width:640px){
-            .oper5-owner-label{margin-left:7px;font-size:12px;}
-          }
+          ins.adsbygoogle,[aria-label="광고"],[aria-label="広告"],[aria-label="Advertisement"]{display:none!important}
+          a[href="/privacy/"],a[href="/privacy"],a[href="https://kwonoyoung.github.io/privacy/"],a[href*="instagram.com/yourenext2026"]{display:none!important}
+          .oper5-owner-label{display:inline-flex;align-items:center;margin-left:10px;font-size:14px;font-weight:700;line-height:1;white-space:nowrap;vertical-align:middle}
+          #oper5-world-language{position:fixed;right:14px;bottom:14px;z-index:2147483000;background:#fff;border:1px solid rgba(0,0,0,.16);border-radius:999px;padding:7px 11px;box-shadow:0 3px 12px rgba(0,0,0,.15);font:600 13px/1.2 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#111}
+          #oper5-world-language select{border:0;background:transparent;color:inherit;font:inherit;outline:none;max-width:180px;cursor:pointer}
+          #google_translate_element{position:fixed;left:-9999px;top:-9999px;width:1px;height:1px;overflow:hidden}
+          .goog-te-banner-frame.skiptranslate,.goog-te-balloon-frame{display:none!important} body{top:0!important}
+          @media(max-width:640px){.oper5-owner-label{margin-left:7px;font-size:12px}#oper5-world-language{right:9px;bottom:9px;padding:6px 9px}#oper5-world-language select{max-width:145px;font-size:12px}}
           </style>'''
 
-          ad_js='''<script id="oper5-ad-free-runtime">
+          world_js='''<script id="oper5-world-language-runtime">
           (()=>{
-            const sel='.ad-slot,.ad-side,.ad-gate,.ad-house,.ad-rec[data-ad-rec],ins.adsbygoogle,[aria-label="광고"],[aria-label="広告"],[aria-label="Advertisement"]';
-            const addOwnerLabel=()=>{
-              try{
-                if(document.querySelector('.oper5-owner-label')) return;
-                const nodes=[...document.querySelectorAll('a,div,span,h1,h2,strong,b')];
-                const brand=nodes.find(el=>/^\\s*YOU[’']RE\\s+NEXT\\s*$/.test((el.textContent||'').trim()));
-                if(!brand) return;
-                const label=document.createElement('span');
-                label.className='oper5-owner-label';
-                label.textContent='오춘기 권오영';
-                brand.insertAdjacentElement('afterend',label);
-              }catch(e){}
-            };
-            const clean=root=>{
-              try{
-                if(root && root.nodeType===1 && root.matches && root.matches(sel)){root.remove();return;}
-                if(root && root.querySelectorAll) root.querySelectorAll(sel).forEach(el=>el.remove());
-                if(root && root.querySelectorAll) root.querySelectorAll('a').forEach(el=>{
-                  const href=(el.getAttribute('href')||'').trim().toLowerCase();
-                  if(href==='/privacy/' || href==='/privacy' || href==='https://kwonoyoung.github.io/privacy/' || href.includes('instagram.com/yourenext2026')) el.remove();
-                });
-                addOwnerLabel();
-              }catch(e){}
-            };
-            clean(document);
-            new MutationObserver(ms=>{
-              for(const m of ms) for(const n of m.addedNodes) if(n && n.nodeType===1) clean(n);
-              addOwnerLabel();
-            }).observe(document.documentElement,{childList:true,subtree:true});
+            const nativeRoutes={ko:'/oper5/',en:'/oper5/en/',ja:'/oper5/ja/',es:'/oper5/us/es/'};
+            const langs=[
+              ['','🌐 세계 언어'],['ko','한국어'],['en','English'],['ja','日本語'],['es','Español'],['zh-CN','中文(简体)'],['zh-TW','中文(繁體)'],['fr','Français'],['de','Deutsch'],['pt','Português'],['it','Italiano'],['ru','Русский'],['ar','العربية'],['hi','हिन्दी'],['bn','বাংলা'],['ur','اردو'],['id','Bahasa Indonesia'],['ms','Bahasa Melayu'],['vi','Tiếng Việt'],['th','ไทย'],['tr','Türkçe'],['nl','Nederlands'],['pl','Polski'],['uk','Українська'],['fa','فارسی'],['he','עברית'],['sv','Svenska'],['no','Norsk'],['da','Dansk'],['fi','Suomi'],['cs','Čeština'],['sk','Slovenčina'],['hu','Magyar'],['ro','Română'],['bg','Български'],['el','Ελληνικά'],['sr','Српски'],['hr','Hrvatski'],['sl','Slovenščina'],['lt','Lietuvių'],['lv','Latviešu'],['et','Eesti'],['ca','Català'],['eu','Euskara'],['gl','Galego'],['ga','Gaeilge'],['cy','Cymraeg'],['is','Íslenska'],['mt','Malti'],['sq','Shqip'],['mk','Македонски'],['sw','Kiswahili'],['af','Afrikaans'],['zu','isiZulu'],['xh','isiXhosa'],['st','Sesotho'],['sn','Shona'],['so','Soomaali'],['am','አማርኛ'],['ha','Hausa'],['ig','Igbo'],['yo','Yorùbá'],['ne','नेपाली'],['si','සිංහල'],['ta','தமிழ்'],['te','తెలుగు'],['ml','മലയാളം'],['kn','ಕನ್ನಡ'],['mr','मराठी'],['gu','ગુજરાતી'],['pa','ਪੰਜਾਬੀ'],['my','မြန်မာ'],['km','ខ្មែរ'],['lo','ລາວ'],['mn','Монгол'],['kk','Қазақ'],['ky','Кыргызча'],['uz','Oʻzbekcha'],['az','Azərbaycanca'],['ka','ქართული'],['hy','Հայերեն'],['ps','پښتو'],['ku','Kurdî'],['tl','Filipino'],['jw','Basa Jawa'],['su','Basa Sunda'],['mi','Māori'],['sm','Gagana Samoa'],['haw','ʻŌlelo Hawaiʻi'],['ht','Kreyòl Ayisyen'],['eo','Esperanto'],['la','Latina'],['lb','Lëtzebuergesch'],['mg','Malagasy'],['ny','Chichewa'],['co','Corsu'],['fy','Frysk'],['gd','Gàidhlig'],['hmn','Hmong'],['ceb','Cebuano'],['yi','ייִדיש'],['tg','Тоҷикӣ']
+            ];
+            const base=((document.documentElement.lang||'en').toLowerCase().split('-')[0]||'en');
+            const box=document.createElement('div'); box.id='oper5-world-language'; box.className='notranslate'; box.setAttribute('translate','no');
+            const sel=document.createElement('select'); sel.setAttribute('aria-label','세계 언어 선택');
+            langs.forEach(([v,n])=>{const o=document.createElement('option');o.value=v;o.textContent=n;sel.appendChild(o)}); box.appendChild(sel); document.body.appendChild(box);
+            const gt=document.createElement('div');gt.id='google_translate_element';document.body.appendChild(gt);
+            window.googleTranslateElementInit=()=>{try{new google.translate.TranslateElement({pageLanguage:base,autoDisplay:false},'google_translate_element')}catch(e){}};
+            const s=document.createElement('script');s.src='https://translate.google.com/translate_a/element.js?cb=googleTranslateElementInit';s.async=true;document.head.appendChild(s);
+            const setCookie=(v)=>{document.cookie='googtrans='+v+';path=/';document.cookie='googtrans='+v+';path=/oper5';};
+            sel.addEventListener('change',()=>{
+              const target=sel.value;if(!target)return;
+              if(nativeRoutes[target]){setCookie('');location.href=nativeRoutes[target];return;}
+              setCookie('/'+base+'/'+target);location.reload();
+            });
           })();
           </script>'''
 
-          def adapt(path, lang, cc, canonical):
+          runtime='''<script id="oper5-ad-free-runtime">
+          (()=>{
+            const sel='.ad-slot,.ad-side,.ad-gate,.ad-house,.ad-rec[data-ad-rec],ins.adsbygoogle,[aria-label="광고"],[aria-label="広告"],[aria-label="Advertisement"]';
+            const addOwnerLabel=()=>{try{if(document.querySelector('.oper5-owner-label'))return;const nodes=[...document.querySelectorAll('a,div,span,h1,h2,strong,b')];const brand=nodes.find(el=>/^\\s*YOU[’']RE\\s+NEXT\\s*$/.test((el.textContent||'').trim()));if(!brand)return;const label=document.createElement('span');label.className='oper5-owner-label notranslate';label.setAttribute('translate','no');label.textContent='오춘기 권오영';brand.insertAdjacentElement('afterend',label)}catch(e){}};
+            const clean=root=>{try{if(root&&root.nodeType===1&&root.matches&&root.matches(sel)){root.remove();return}if(root&&root.querySelectorAll)root.querySelectorAll(sel).forEach(el=>el.remove());if(root&&root.querySelectorAll)root.querySelectorAll('a').forEach(el=>{const href=(el.getAttribute('href')||'').trim().toLowerCase();if(href==='/privacy/'||href==='/privacy'||href==='https://kwonoyoung.github.io/privacy/'||href.includes('instagram.com/yourenext2026'))el.remove()});addOwnerLabel()}catch(e){}};
+            clean(document);new MutationObserver(ms=>{for(const m of ms)for(const n of m.addedNodes)if(n&&n.nodeType===1)clean(n);addOwnerLabel()}).observe(document.documentElement,{childList:true,subtree:true});
+          })();
+          </script>'''
+
+          def adapt(path,lang,cc,canonical):
               t=path.read_text(encoding='utf-8',errors='replace')
-
-              replacements={
-                  'https://youre-next.app/ko/': SITE,
-                  'https://youre-next.app/en/': SITE+'en/',
-                  'https://youre-next.app/ja/': SITE+'ja/',
-                  'https://youre-next.app/us/es/': SITE+'us/es/',
-              }
-              for old,new in replacements.items():
-                  t=t.replace(old,new)
-
-              t=t.replace("return '/' + (c.pack === 'KR' ? '' : c.pack.toLowerCase() + '/') + lang + '/' + (KIND_PATH[kind] || '');",
-                          "return '/oper5/' + (c.pack === 'KR' ? '' : c.pack.toLowerCase() + '/') + lang + '/' + (KIND_PATH[kind] || '');")
-
-              t=t.replace('"/house/', '"https://youre-next.app/house/')
-              t=t.replace("'/house/", "'https://youre-next.app/house/")
-              t=t.replace("fetch('/loc/", "fetch('https://youre-next.app/loc/")
-
-              t=re.sub(r'<a\b[^>]*href=["\'](?:https://kwonoyoung\.github\.io)?/privacy/?["\'][^>]*>.*?</a>', '', t, flags=re.I|re.S)
-              t=re.sub(r'<a\b[^>]*href=["\'][^"\']*instagram\.com/yourenext2026/?[^"\']*["\'][^>]*>.*?</a>', '', t, flags=re.I|re.S)
-
-              t=re.sub(r'<meta property="og:url" content="[^"]*">',
-                       f'<meta property="og:url" content="{canonical}">',t,count=1)
-              t=re.sub(r'<link rel="canonical" href="[^"]*">',
-                       f'<link rel="canonical" href="{canonical}">',t,count=1)
-
-              t=re.sub(r'<link rel="alternate"[^>]+>', '', t)
-              hreflangs=(
-                  f'<link rel="alternate" hreflang="ko" href="{SITE}">'
-                  f'<link rel="alternate" hreflang="en" href="{SITE}en/">'
-                  f'<link rel="alternate" hreflang="ja" href="{SITE}ja/">'
-                  f'<link rel="alternate" hreflang="es" href="{SITE}us/es/">'
-                  f'<link rel="alternate" hreflang="x-default" href="{SITE}">'
-              )
-              t=t.replace('</head>',hreflangs+ad_css+'</head>',1)
-
+              replacements={'https://youre-next.app/ko/':SITE,'https://youre-next.app/en/':SITE+'en/','https://youre-next.app/ja/':SITE+'ja/','https://youre-next.app/us/es/':SITE+'us/es/'}
+              for old,new in replacements.items(): t=t.replace(old,new)
+              t=t.replace("return '/' + (c.pack === 'KR' ? '' : c.pack.toLowerCase() + '/') + lang + '/' + (KIND_PATH[kind] || '');","return '/oper5/' + (c.pack === 'KR' ? '' : c.pack.toLowerCase() + '/') + lang + '/' + (KIND_PATH[kind] || '');")
+              t=t.replace('"/house/','"https://youre-next.app/house/').replace("'/house/","'https://youre-next.app/house/").replace("fetch('/loc/","fetch('https://youre-next.app/loc/")
+              t=re.sub(r'<a\b[^>]*href=["\'](?:https://kwonoyoung\.github\.io)?/privacy/?["\'][^>]*>.*?</a>','',t,flags=re.I|re.S)
+              t=re.sub(r'<a\b[^>]*href=["\'][^"\']*instagram\.com/yourenext2026/?[^"\']*["\'][^>]*>.*?</a>','',t,flags=re.I|re.S)
+              t=re.sub(r'<meta property="og:url" content="[^"]*">',f'<meta property="og:url" content="{canonical}">',t,count=1)
+              t=re.sub(r'<link rel="canonical" href="[^"]*">',f'<link rel="canonical" href="{canonical}">',t,count=1)
+              t=re.sub(r'<link rel="alternate"[^>]+>','',t)
+              hreflangs=(f'<link rel="alternate" hreflang="ko" href="{SITE}"><link rel="alternate" hreflang="en" href="{SITE}en/"><link rel="alternate" hreflang="ja" href="{SITE}ja/"><link rel="alternate" hreflang="es" href="{SITE}us/es/"><link rel="alternate" hreflang="x-default" href="{SITE}">')
+              t=t.replace('</head>',hreflangs+css+'</head>',1)
               t=re.sub(r'<script[^>]+googletagmanager\.com/gtag/js[^>]*></script>','',t,flags=re.I)
               t=re.sub(r'<script>window\.dataLayer=window\.dataLayer\|\|\[\];function gtag\(\)\{dataLayer\.push\(arguments\);\}.*?</script>','',t,count=1,flags=re.S)
-
-              t=t.replace(
-                  "const SIDE_ON = () => !!(window.matchMedia && window.matchMedia('(min-width:1280px)').matches);",
-                  "const SIDE_ON = () => false;"
-              )
-
-              t=t.replace('</body>',ad_js+'</body>',1)
+              t=t.replace("const SIDE_ON = () => !!(window.matchMedia && window.matchMedia('(min-width:1280px)').matches);","const SIDE_ON = () => false;")
+              t=t.replace('</body>',runtime+world_js+'</body>',1)
               path.write_text(t,encoding='utf-8')
 
-          for args in pages:
-              adapt(*args)
+          for args in pages: adapt(*args)
           PY
 
       - name: Validate JavaScript syntax for every language
@@ -177,6 +131,6 @@ jobs:
           if git diff --cached --quiet; then
             echo 'No generated changes.'
           else
-            git commit -m 'Add owner label next to YOU’RE NEXT branding'
+            git commit -m 'Add world language translation support'
             git push
           fi
