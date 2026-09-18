@@ -117,8 +117,8 @@ button{cursor:pointer;background:none;border:0;padding:0;margin:0}
 .top{position:sticky;top:0;z-index:40;background:var(--top-bg);-webkit-backdrop-filter:blur(16px);backdrop-filter:blur(16px);border-bottom:1px solid var(--border)}
 .top .wrap-wide{display:flex;align-items:center;justify-content:space-between;height:56px;gap:12px}
 .brand{display:inline-flex;align-items:center;gap:9px;font:700 16px/1 var(--f-display);letter-spacing:-.01em;text-decoration:none}
-.nav{display:flex;align-items:center;gap:2px}
-.nav a{display:inline-flex;align-items:center;height:44px;font:500 14px/1 var(--f-body);color:var(--muted);text-decoration:none;padding:0 10px;border-radius:10px;transition:color .15s,background .15s}
+.nav{display:flex;align-items:center;gap:2px;flex-wrap:wrap}
+.nav a{display:inline-flex;align-items:center;height:44px;font:500 14px/1 var(--f-body);color:var(--muted);text-decoration:none;padding:0 8px;border-radius:10px;transition:color .15s,background .15s;flex:0 1 auto;min-width:auto}
 .nav a:hover{color:var(--text);background:var(--surface-2)}
 .nav a.on{color:var(--text)}
 .lang{position:relative;display:inline-flex;align-items:center;margin-left:6px}
@@ -126,7 +126,7 @@ button{cursor:pointer;background:none;border:0;padding:0;margin:0}
 .lang select{appearance:none;-webkit-appearance:none;height:44px;padding:0 26px 0 14px;border-radius:999px;background:var(--glass) var(--chev) no-repeat right 10px center;border:1px solid var(--glass-b);font:500 13px var(--f-body);cursor:pointer}
 .lang select:hover{border-color:var(--border-2)}
 .nav a{white-space:nowrap}
-.lang.cc{margin-left:4px}
+.lang.cc{margin-left:4px;display:none !important}
 .lang.cc select{padding-left:12px}
 .brand{white-space:nowrap}
 @media(max-width:479px){.top .wrap-wide{padding:0 14px;gap:8px}.nav a{padding:0 6px;font-size:13px}.lang{margin-left:0}.lang svg{left:8px}.lang select{padding:0 22px 0 11px;font-size:12px;background-position:right 8px center}.lang.cc{margin-left:2px}.lang.cc select{padding-left:10px}}
