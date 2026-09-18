@@ -1,0 +1,57 @@
+name: Fix oper5 header UI
+
+on:
+  workflow_run:
+    workflows: ["Rebuild multilingual oper5 from YOU’RE NEXT"]
+    types: [completed]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Hide only KR KR selector and keep main menus
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+          files=[Path('index.html'),Path('en/index.html'),Path('ja/index.html'),Path('us/es/index.html')]
+          css='''<style id="oper5-header-fix">
+          /* Hide only the country selector shown as KR KR. Keep all navigation menus. */
+          .oper5-top-country-hidden{display:none!important;visibility:hidden!important}
+          </style>'''
+          js='''<script id="oper5-header-fix-js">(()=>{
+          const hide=()=>{
+            document.querySelectorAll('button,[role="button"],div,span').forEach(el=>{
+              const t=(el.textContent||'').replace(/\\s+/g,'').toUpperCase();
+              if(t==='KRKR'){
+                const target=el.closest('button,[role="button"]')||el;
+                target.classList.add('oper5-top-country-hidden');
+              }
+            });
+          };
+          hide();
+          new MutationObserver(hide).observe(document.documentElement,{childList:true,subtree:true});
+          })();</script>'''
+          for f in files:
+            if f.exists():
+              t=f.read_text(encoding='utf-8',errors='replace')
+              if 'oper5-header-fix' not in t:
+                t=t.replace('</head>',css+'</head>',1)
+                t=t.replace('</body>',js+'</body>',1)
+                f.write_text(t,encoding='utf-8')
+          PY
+
+      - name: Commit fix
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add .
+          git commit -m "Hide KR KR selector only" || exit 0
+          git push
