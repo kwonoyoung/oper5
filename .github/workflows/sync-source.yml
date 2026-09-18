@@ -1,4 +1,4 @@
-name: Rebuild oper5 from YOU’RE NEXT
+name: Rebuild multilingual oper5 from YOU’RE NEXT
 
 on:
   push:
@@ -17,62 +17,40 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Fetch current Korean source page
+      - name: Fetch current source pages
         run: |
-          curl -L --fail --retry 3 \
-            -A 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/152 Safari/537.36' \
-            'https://youre-next.app/ko/?lang=ko&cc=KR' \
-            -o index.html
+          set -e
+          UA='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/152 Safari/537.36'
+          mkdir -p en ja us/es
+          curl -L --fail --retry 3 -A "$UA" 'https://youre-next.app/ko/?lang=ko&cc=KR' -o index.html
+          curl -L --fail --retry 3 -A "$UA" 'https://youre-next.app/en/?lang=en&cc=US' -o en/index.html
+          curl -L --fail --retry 3 -A "$UA" 'https://youre-next.app/ja/?lang=ja&cc=JP' -o ja/index.html
+          curl -L --fail --retry 3 -A "$UA" 'https://youre-next.app/us/es/?lang=es&cc=US' -o us/es/index.html
 
-      - name: Adapt for oper5 and remove ads only
+      - name: Adapt all languages for oper5 and remove ads only
         run: |
           python - <<'PY'
           from pathlib import Path
           import re
 
-          p = Path('index.html')
-          t = p.read_text(encoding='utf-8', errors='replace')
+          SITE='https://kwonoyoung.github.io/oper5/'
+          pages=[
+              (Path('index.html'),'ko','KR',SITE),
+              (Path('en/index.html'),'en','US',SITE+'en/'),
+              (Path('ja/index.html'),'ja','JP',SITE+'ja/'),
+              (Path('us/es/index.html'),'es','US',SITE+'us/es/'),
+          ]
 
-          # Keep the source site's visible UI and features, but make clone navigation
-          # stay on oper5 where the source has a direct Korean home link.
-          t = t.replace('https://youre-next.app/ko/?lang=ko&amp;cc=KR#/', './?lang=ko&amp;cc=KR#/')
-          t = t.replace('https://youre-next.app/ko/?lang=ko&cc=KR#/', './?lang=ko&cc=KR#/')
-
-          # Point metadata at this deployment.
-          t = re.sub(r'<meta property="og:url" content="[^"]*">',
-                     '<meta property="og:url" content="https://kwonoyoung.github.io/oper5/">', t, count=1)
-          t = re.sub(r'<link rel="canonical" href="[^"]*">',
-                     '<link rel="canonical" href="https://kwonoyoung.github.io/oper5/">', t, count=1)
-
-          # Source assets/data that use root-relative paths must still resolve correctly
-          # when the page is hosted under /oper5/ on GitHub Pages.
-          t = t.replace('"/house/', '"https://youre-next.app/house/')
-          t = t.replace("'/house/", "'https://youre-next.app/house/")
-          t = t.replace("fetch('/loc/", "fetch('https://youre-next.app/loc/")
-
-          # Do not send oper5 traffic into the source site's analytics property.
-          t = re.sub(r'<script[^>]+googletagmanager\.com/gtag/js[^>]*></script>', '', t, flags=re.I)
-          t = re.sub(r'<script>window\.dataLayer=window\.dataLayer\|\|\[\];function gtag\(\)\{dataLayer\.push\(arguments\);\}.*?</script>', '', t, count=1, flags=re.S)
-
-          # Removing the desktop side-ad rail also removes the blank 300px column.
-          t = t.replace(
-              "const SIDE_ON = () => !!(window.matchMedia && window.matchMedia('(min-width:1280px)').matches);",
-              "const SIDE_ON = () => false;"
-          )
-
-          # Hide every source ad placement before first paint. No other UI is hidden.
-          ad_css = '''<style id="oper5-ad-free">
+          ad_css='''<style id="oper5-ad-free">
           .ad-slot,.ad-side,.ad-gate,.ad-house,.ad-rec[data-ad-rec],
-          ins.adsbygoogle,[aria-label="광고"],[aria-label="広告"] {
+          ins.adsbygoogle,[aria-label="광고"],[aria-label="広告"],[aria-label="Advertisement"] {
             display:none!important;
           }
           </style>'''
-          t = t.replace('</head>', ad_css + '</head>', 1)
 
-          # SPA routes can create ad nodes after initial load; remove only those nodes.
-          ad_js = '''<script id="oper5-ad-free-runtime">
+          ad_js='''<script id="oper5-ad-free-runtime">
           (()=>{
-            const sel='.ad-slot,.ad-side,.ad-gate,.ad-house,.ad-rec[data-ad-rec],ins.adsbygoogle,[aria-label="광고"],[aria-label="広告"]';
+            const sel='.ad-slot,.ad-side,.ad-gate,.ad-house,.ad-rec[data-ad-rec],ins.adsbygoogle,[aria-label="광고"],[aria-label="広告"],[aria-label="Advertisement"]';
             const clean=root=>{
               try{
                 if(root && root.nodeType===1 && root.matches && root.matches(sel)){root.remove();return;}
@@ -85,30 +63,90 @@ jobs:
             }).observe(document.documentElement,{childList:true,subtree:true});
           })();
           </script>'''
-          t = t.replace('</body>', ad_js + '</body>', 1)
 
-          p.write_text(t, encoding='utf-8')
+          def adapt(path, lang, cc, canonical):
+              t=path.read_text(encoding='utf-8',errors='replace')
+
+              # Keep language/country switching inside the oper5 GitHub Pages site.
+              replacements={
+                  'https://youre-next.app/ko/': SITE,
+                  'https://youre-next.app/en/': SITE+'en/',
+                  'https://youre-next.app/ja/': SITE+'ja/',
+                  'https://youre-next.app/us/es/': SITE+'us/es/',
+              }
+              for old,new in replacements.items():
+                  t=t.replace(old,new)
+
+              # Some source routing code creates root paths such as /en/ and /ja/.
+              # Prefix those routes with /oper5/ so switches do not leave this project site.
+              t=t.replace("return '/' + (c.pack === 'KR' ? '' : c.pack.toLowerCase() + '/') + lang + '/' + (KIND_PATH[kind] || '');",
+                          "return '/oper5/' + (c.pack === 'KR' ? '' : c.pack.toLowerCase() + '/') + lang + '/' + (KIND_PATH[kind] || '');")
+
+              # Root-relative source assets/data must resolve on the source host, not github.io.
+              t=t.replace('"/house/', '"https://youre-next.app/house/')
+              t=t.replace("'/house/", "'https://youre-next.app/house/")
+              t=t.replace("fetch('/loc/", "fetch('https://youre-next.app/loc/")
+
+              # Deployment metadata for each language page.
+              t=re.sub(r'<meta property="og:url" content="[^"]*">',
+                       f'<meta property="og:url" content="{canonical}">',t,count=1)
+              t=re.sub(r'<link rel="canonical" href="[^"]*">',
+                       f'<link rel="canonical" href="{canonical}">',t,count=1)
+
+              # Correct hreflang targets for this GitHub Pages deployment.
+              t=re.sub(r'<link rel="alternate"[^>]+>', '', t)
+              hreflangs=(
+                  f'<link rel="alternate" hreflang="ko" href="{SITE}">'
+                  f'<link rel="alternate" hreflang="en" href="{SITE}en/">'
+                  f'<link rel="alternate" hreflang="ja" href="{SITE}ja/">'
+                  f'<link rel="alternate" hreflang="es" href="{SITE}us/es/">'
+                  f'<link rel="alternate" hreflang="x-default" href="{SITE}">'
+              )
+              t=t.replace('</head>',hreflangs+ad_css+'</head>',1)
+
+              # Do not send oper5 traffic to the source Analytics property.
+              t=re.sub(r'<script[^>]+googletagmanager\.com/gtag/js[^>]*></script>','',t,flags=re.I)
+              t=re.sub(r'<script>window\.dataLayer=window\.dataLayer\|\|\[\];function gtag\(\)\{dataLayer\.push\(arguments\);\}.*?</script>','',t,count=1,flags=re.S)
+
+              # Disable the desktop side-ad rail so no blank column remains.
+              t=t.replace(
+                  "const SIDE_ON = () => !!(window.matchMedia && window.matchMedia('(min-width:1280px)').matches);",
+                  "const SIDE_ON = () => false;"
+              )
+
+              # Dynamically-created SPA ads are removed too; all other UI stays intact.
+              t=t.replace('</body>',ad_js+'</body>',1)
+              path.write_text(t,encoding='utf-8')
+
+          for args in pages:
+              adapt(*args)
           PY
 
-      - name: Validate JavaScript syntax
+      - name: Validate JavaScript syntax for every language
         run: |
+          set -e
           python - <<'PY'
           from pathlib import Path
           import re
-          h=Path('index.html').read_text(encoding='utf-8', errors='replace')
-          scripts='\n'.join(re.findall(r'<script(?:[^>]*)>(.*?)</script>', h, re.S|re.I))
-          Path('/tmp/oper5-all.js').write_text(scripts, encoding='utf-8')
+          pages=['index.html','en/index.html','ja/index.html','us/es/index.html']
+          for i,page in enumerate(pages):
+              h=Path(page).read_text(encoding='utf-8',errors='replace')
+              scripts='\n'.join(re.findall(r'<script(?:[^>]*)>(.*?)</script>',h,re.S|re.I))
+              Path(f'/tmp/oper5-{i}.js').write_text(scripts,encoding='utf-8')
           PY
-          node --check /tmp/oper5-all.js
+          node --check /tmp/oper5-0.js
+          node --check /tmp/oper5-1.js
+          node --check /tmp/oper5-2.js
+          node --check /tmp/oper5-3.js
 
-      - name: Commit rebuilt site
+      - name: Commit multilingual rebuilt site
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add index.html
+          git add index.html en/index.html ja/index.html us/es/index.html
           if git diff --cached --quiet; then
             echo 'No generated changes.'
           else
-            git commit -m 'Deploy YOU’RE NEXT clone without ads'
+            git commit -m 'Deploy multilingual YOU’RE NEXT clone without ads'
             git push
           fi
