@@ -53,25 +53,65 @@ jobs:
               "const SIDE_ON = () => false;"
           )
 
-          # Hide all source-site ad placements before first paint. This covers
-          # the landing banner, inline result/ranking ads, side ads and any
-          # future AdSense/house-ad variants that use the existing ad classes.
+          # Hide all source-site ad placements before first paint.
           no_ads_css = '''<style id="oper5-no-ads">
           .ad-slot,.ad-side,.ad-gate,.ad-house,.ad-rec[data-ad-rec],ins.adsbygoogle,[aria-label="광고"],[aria-label="広告"]{display:none!important}
           </style>'''
           t = t.replace('</head>', no_ads_css + '</head>', 1)
 
-          # Remove ad nodes from the DOM as well, including ads generated after
-          # hash-route navigation. CSS above prevents any visible flash.
-          no_ads_js = '''<script id="oper5-no-ads-runtime">
+          # Remove ad nodes plus the requested footer/language UI on every SPA route.
+          cleanup_js = '''<script id="oper5-cleanup-runtime">
           (()=>{
-            const sel='.ad-slot,.ad-side,.ad-gate,.ad-house,.ad-rec[data-ad-rec],ins.adsbygoogle,[aria-label="광고"],[aria-label="広告"]';
-            const clean=(root=document)=>{try{root.querySelectorAll(sel).forEach(el=>el.remove())}catch(e){}};
+            const adSel='.ad-slot,.ad-side,.ad-gate,.ad-house,.ad-rec[data-ad-rec],ins.adsbygoogle,[aria-label="광고"],[aria-label="広告"]';
+            const removeAds=(root=document)=>{try{root.querySelectorAll(adSel).forEach(el=>el.remove())}catch(e){}};
+
+            const exactText = new Set(['개인정보처리방침','Instagram','한국어','KR KR','KR']);
+            const removeRequested=(root=document)=>{
+              try{
+                // Direct links/buttons/selects for privacy, Instagram and language/country controls.
+                root.querySelectorAll('a,button,select,[role="button"]').forEach(el=>{
+                  const txt=(el.textContent||'').replace(/\s+/g,' ').trim();
+                  const href=(el.getAttribute&&el.getAttribute('href')||'').toLowerCase();
+                  const aria=(el.getAttribute&&el.getAttribute('aria-label')||'').toLowerCase();
+                  const title=(el.getAttribute&&el.getAttribute('title')||'').toLowerCase();
+                  const isPrivacy = txt==='개인정보처리방침' || /privacy/.test(href+aria+title);
+                  const isInstagram = txt==='Instagram' || /instagram\.com/.test(href);
+                  const isLanguage = exactText.has(txt) || /language|locale|country/.test(aria+' '+title);
+                  if(isPrivacy || isInstagram || isLanguage){
+                    const wrap=el.closest('li,nav,.lang,.language,.locale,.country,.dropdown,.select-wrap') || el;
+                    wrap.remove();
+                  }
+                });
+
+                // Fallback for text-only wrappers used by the mobile/desktop footer.
+                root.querySelectorAll('span,div,p').forEach(el=>{
+                  const txt=(el.textContent||'').replace(/\s+/g,' ').trim();
+                  if(exactText.has(txt)){
+                    const interactive=el.closest('a,button,[role="button"]');
+                    (interactive||el).remove();
+                  }
+                });
+              }catch(e){}
+            };
+
+            const clean=(root=document)=>{removeAds(root);removeRequested(root)};
             clean();
-            new MutationObserver(ms=>{for(const m of ms){for(const n of m.addedNodes){if(n&&n.nodeType===1){if(n.matches&&n.matches(sel))n.remove();else clean(n)}}}}).observe(document.documentElement,{childList:true,subtree:true});
+            new MutationObserver(ms=>{
+              for(const m of ms){
+                for(const n of m.addedNodes){
+                  if(n&&n.nodeType===1){
+                    if(n.matches&&n.matches(adSel)) n.remove();
+                    else clean(n);
+                  }
+                }
+              }
+              removeRequested(document);
+            }).observe(document.documentElement,{childList:true,subtree:true});
+
+            window.addEventListener('hashchange',()=>setTimeout(()=>clean(document),0));
           })();
           </script>'''
-          t = t.replace('</body>', no_ads_js + '</body>', 1)
+          t = t.replace('</body>', cleanup_js + '</body>', 1)
 
           p.write_text(t, encoding='utf-8')
           PY
@@ -84,6 +124,6 @@ jobs:
           if git diff --cached --quiet; then
             echo 'No changes.'
           else
-            git commit -m 'Deploy ad-free YOU’RE NEXT clone to oper5'
+            git commit -m 'Deploy cleaned oper5 UI'
             git push
           fi
